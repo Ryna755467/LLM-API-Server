@@ -13,6 +13,9 @@ export class LlmService {
     configuration: {
       baseURL: process.env.LLM_BASE_URL,
     },
+    modelKwargs: {
+      reasoning_effort: 'minimal',
+    },
     temperature: 0.7,
   });
 
@@ -43,6 +46,10 @@ export class LlmService {
         role: msg.role === 'user' ? 'human' : 'assistant',
         content: msg.content,
       }));
+      messages.unshift({
+        role: 'system',
+        content: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
+      });
       messages.push({ role: 'human', content: prompt });
 
       const res = await this.model.invoke(messages);
