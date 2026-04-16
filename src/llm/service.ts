@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
+import { createAgent } from 'langchain';
+import { SemanticCache } from './caches/semantic';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Conversation } from '../sql/entities/conversation';
-import { Message } from '../sql/entities/message';
+import { Conversation } from '@sql/entities/conversation';
+import { Message } from '@sql/entities/message';
 
 @Injectable()
 export class LlmService {
@@ -19,6 +21,14 @@ export class LlmService {
     temperature: 0.7,
   });
 
+  private readonly agent = createAgent({
+    model: this.model,
+    tools: [],
+    systemPrompt: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
+  });
+
+  private readonly cache = new SemanticCache();
+
   constructor(
     @InjectRepository(Conversation)
     private readonly conversationRepo: Repository<Conversation>,
@@ -27,49 +37,57 @@ export class LlmService {
     private readonly messageRepo: Repository<Message>,
   ) {}
 
-  async chat(prompt: string, conversationId?: string) {
+  async chat(prompt: string, reqConversationId?: string) {
     try {
+      let answer: string | null = null;
+      let conversationId = reqConversationId;
+
       if (!conversationId) {
         const newConv = this.conversationRepo.create({
           title: prompt.slice(0, 20) + '...',
         });
         const conv = await this.conversationRepo.save(newConv);
         conversationId = conv.id;
+
+        answer = await this.cache.lookup(prompt);
       }
 
-      const historyMessages = await this.messageRepo.find({
-        where: { conversationId },
-        order: { createdAt: 'ASC' },
-      });
+      if (!answer) {
+        const historyMessages = await this.messageRepo.find({
+          where: { conversationId },
+          order: { createdAt: 'ASC' },
+        });
 
-      const messages = historyMessages.map((msg) => ({
-        role: msg.role === 'user' ? 'human' : 'assistant',
-        content: msg.content,
-      }));
-      messages.unshift({
-        role: 'system',
-        content: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
-      });
-      messages.push({ role: 'human', content: prompt });
+        const messages = historyMessages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+        messages.push({ role: 'user', content: prompt });
 
-      const res = await this.model.invoke(messages);
-      const answer = res.content as string;
+        const res = await this.agent.invoke({ messages });
+        answer = res.messages.at(-1)?.content as string;
+      }
 
-      await this.messageRepo.save(
+      if (!answer) {
+        return { success: false, content: 'no answer' };
+      }
+
+      if (!reqConversationId) {
+        await this.cache.update(prompt, answer);
+      }
+
+      await this.messageRepo.save([
         this.messageRepo.create({
           conversationId,
           role: 'user',
           content: prompt,
         }),
-      );
-
-      await this.messageRepo.save(
         this.messageRepo.create({
           conversationId,
           role: 'assistant',
           content: answer,
         }),
-      );
+      ]);
 
       return {
         success: true,
@@ -77,11 +95,8 @@ export class LlmService {
         conversationId,
       };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '未知错误';
-      return {
-        success: false,
-        content: message,
-      };
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return { success: false, content: message };
     }
   }
 }
