@@ -6,6 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from '@sql/entities/conversation';
 import { Message } from '@sql/entities/message';
+import { visionTool } from './tools/vision';
 
 @Injectable()
 export class LlmService {
@@ -21,9 +22,18 @@ export class LlmService {
     temperature: 0.7,
   });
 
+  private readonly visionModel = new ChatOpenAI({
+    model: process.env.VISION_MODEL,
+    apiKey: process.env.VISION_API_KEY,
+    configuration: {
+      baseURL: process.env.VISION_BASE_URL,
+    },
+    temperature: 0.1,
+  });
+
   private readonly agent = createAgent({
     model: this.model,
-    tools: [],
+    tools: [visionTool(this.visionModel)],
     systemPrompt: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
   });
 
