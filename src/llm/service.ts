@@ -10,7 +10,7 @@ import { visionTool } from './tools/vision';
 
 @Injectable()
 export class LlmService {
-  private readonly model = new ChatOpenAI({
+  private readonly chatModel = new ChatOpenAI({
     model: process.env.LLM_MODEL,
     apiKey: process.env.LLM_API_KEY,
     configuration: {
@@ -28,11 +28,14 @@ export class LlmService {
     configuration: {
       baseURL: process.env.VISION_BASE_URL,
     },
+    modelKwargs: {
+      reasoning_effort: 'minimal',
+    },
     temperature: 0.1,
   });
 
   private readonly agent = createAgent({
-    model: this.model,
+    model: this.chatModel,
     tools: [visionTool(this.visionModel)],
     systemPrompt: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
   });

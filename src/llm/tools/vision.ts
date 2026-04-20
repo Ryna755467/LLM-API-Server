@@ -4,28 +4,38 @@ import { z } from 'zod';
 
 export const visionTool = (visionModel: ChatOpenAI) =>
   tool(
-    async ({ mediaType, mediaData, query }) => {
+    async ({ list, query }) => {
       try {
-        const result = await visionModel.invoke([
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: mediaData } },
-              { type: 'text', text: query },
-            ],
-          },
-        ]);
+        const content = [
+          ...list.map((item) => {
+            const { mediaType, mediaData } = item;
+
+            const mediaContent = {
+              image: { type: 'image_url', image_url: { url: mediaData } },
+              video: { type: 'video_url', video_url: { url: mediaData } },
+            }[mediaType];
+
+            return mediaContent;
+          }),
+          { type: 'text', text: query },
+        ];
+
+        const result = await visionModel.invoke([{ role: 'user', content }]);
         return result.content || '识别失败';
       } catch {
-        return '图片识别失败';
+        return '视觉内容识别失败';
       }
     },
     {
       name: 'vision_recognition',
-      description: '识别图片内容，当用户发送图片时调用',
+      description: '识别图片或视频内容，当用户发送图片或视频时调用',
       schema: z.object({
-        mediaType: z.enum(['image']).describe('媒体类型'),
-        mediaData: z.string().describe('媒体URL'),
+        list: z.array(
+          z.object({
+            mediaType: z.enum(['image', 'video']).describe('媒体类型'),
+            mediaData: z.string().describe('媒体URL'),
+          }),
+        ),
         query: z.string().describe('识别指令'),
       }),
     },
