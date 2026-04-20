@@ -57,6 +57,7 @@ export class LlmService {
       let answer: string | null = null;
       let conversationId = reqConversationId;
 
+      // 有上下文的对话不使用缓存
       if (!conversationId) {
         const newConv = this.conversationRepo.create({
           title: prompt.slice(0, 20) + '...',
@@ -81,14 +82,12 @@ export class LlmService {
 
         const res = await this.agent.invoke({ messages });
         answer = res.messages.at(-1)?.content as string;
-      }
 
-      if (!answer) {
-        return { success: false, content: 'no answer' };
-      }
-
-      if (!reqConversationId) {
-        await this.cache.update(prompt, answer);
+        if (!answer) {
+          return { success: false, content: 'no answer' };
+        } else if (!reqConversationId) {
+          await this.cache.update(prompt, answer);
+        }
       }
 
       await this.messageRepo.save([
