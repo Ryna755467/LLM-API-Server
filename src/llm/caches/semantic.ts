@@ -1,5 +1,5 @@
 import Redis from 'ioredis';
-import { Embeddings } from '../embeddings/multimodal';
+import { OpenAIEmbeddings } from '@langchain/openai';
 import { createHash } from 'crypto';
 
 interface CacheEntry {
@@ -9,14 +9,14 @@ interface CacheEntry {
 
 export class SemanticCache {
   private readonly redis: Redis;
-  private readonly embeddings: Embeddings;
+  private readonly embeddings: OpenAIEmbeddings;
 
-  constructor() {
+  constructor(embeddings: OpenAIEmbeddings) {
     this.redis = new Redis({
       host: process.env.REDIS_HOST,
       port: Number(process.env.REDIS_PORT),
     });
-    this.embeddings = new Embeddings();
+    this.embeddings = embeddings;
   }
 
   async lookup(prompt: string): Promise<string | null> {
