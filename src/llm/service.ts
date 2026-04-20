@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { createAgent } from 'langchain';
 import { SemanticCache } from './caches/semantic';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,34 +10,39 @@ import { visionTool } from './tools/vision';
 
 @Injectable()
 export class LlmService {
-  private readonly model = new ChatOpenAI({
-    model: process.env.LLM_MODEL,
-    apiKey: process.env.LLM_API_KEY,
-    configuration: {
-      baseURL: process.env.LLM_BASE_URL,
-    },
-    modelKwargs: {
-      reasoning_effort: 'minimal',
-    },
+  // 对话模型
+  private readonly chatModel = new ChatOpenAI({
+    model: process.env.CHAT_MODEL,
+    apiKey: process.env.CHAT_API_KEY,
+    configuration: { baseURL: process.env.CHAT_BASE_URL },
+    modelKwargs: { reasoning_effort: 'minimal' },
     temperature: 0.7,
   });
 
+  // 视觉模型
   private readonly visionModel = new ChatOpenAI({
     model: process.env.VISION_MODEL,
     apiKey: process.env.VISION_API_KEY,
-    configuration: {
-      baseURL: process.env.VISION_BASE_URL,
-    },
+    configuration: { baseURL: process.env.VISION_BASE_URL },
+    modelKwargs: { reasoning_effort: 'minimal' },
     temperature: 0.1,
   });
 
+  // 向量模型
+  private readonly embeddingModel = new OpenAIEmbeddings({
+    model: process.env.EMBEDDING_MODEL,
+    apiKey: process.env.EMBEDDING_API_KEY,
+    configuration: { baseURL: process.env.EMBEDDING_BASE_URL },
+  });
+
   private readonly agent = createAgent({
-    model: this.model,
+    model: this.chatModel,
     tools: [visionTool(this.visionModel)],
     systemPrompt: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
   });
 
-  private readonly cache = new SemanticCache();
+  // 语义缓存
+  private readonly cache = new SemanticCache(this.embeddingModel);
 
   constructor(
     @InjectRepository(Conversation)
@@ -52,6 +57,7 @@ export class LlmService {
       let answer: string | null = null;
       let conversationId = reqConversationId;
 
+      // 有上下文的对话不使用缓存
       if (!conversationId) {
         const newConv = this.conversationRepo.create({
           title: prompt.slice(0, 20) + '...',
@@ -76,14 +82,12 @@ export class LlmService {
 
         const res = await this.agent.invoke({ messages });
         answer = res.messages.at(-1)?.content as string;
-      }
 
-      if (!answer) {
-        return { success: false, content: 'no answer' };
-      }
-
-      if (!reqConversationId) {
-        await this.cache.update(prompt, answer);
+        if (!answer) {
+          return { success: false, content: 'no answer' };
+        } else if (!reqConversationId) {
+          await this.cache.update(prompt, answer);
+        }
       }
 
       await this.messageRepo.save([
