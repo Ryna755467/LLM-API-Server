@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { createAgent } from 'langchain';
 import { SemanticCache } from './caches/semantic';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,28 +10,29 @@ import { visionTool } from './tools/vision';
 
 @Injectable()
 export class LlmService {
+  // 对话模型
   private readonly chatModel = new ChatOpenAI({
-    model: process.env.LLM_MODEL,
-    apiKey: process.env.LLM_API_KEY,
-    configuration: {
-      baseURL: process.env.LLM_BASE_URL,
-    },
-    modelKwargs: {
-      reasoning_effort: 'minimal',
-    },
+    model: process.env.CHAT_MODEL,
+    apiKey: process.env.CHAT_API_KEY,
+    configuration: { baseURL: process.env.CHAT_BASE_URL },
+    modelKwargs: { reasoning_effort: 'minimal' },
     temperature: 0.7,
   });
 
+  // 视觉模型
   private readonly visionModel = new ChatOpenAI({
     model: process.env.VISION_MODEL,
     apiKey: process.env.VISION_API_KEY,
-    configuration: {
-      baseURL: process.env.VISION_BASE_URL,
-    },
-    modelKwargs: {
-      reasoning_effort: 'minimal',
-    },
+    configuration: { baseURL: process.env.VISION_BASE_URL },
+    modelKwargs: { reasoning_effort: 'minimal' },
     temperature: 0.1,
+  });
+
+  // 向量模型
+  private readonly embeddingModel = new OpenAIEmbeddings({
+    model: process.env.EMBEDDING_MODEL,
+    apiKey: process.env.EMBEDDING_API_KEY,
+    configuration: { baseURL: process.env.EMBEDDING_BASE_URL },
   });
 
   private readonly agent = createAgent({
@@ -40,7 +41,8 @@ export class LlmService {
     systemPrompt: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
   });
 
-  private readonly cache = new SemanticCache();
+  // 语义缓存
+  private readonly cache = new SemanticCache(this.embeddingModel);
 
   constructor(
     @InjectRepository(Conversation)
