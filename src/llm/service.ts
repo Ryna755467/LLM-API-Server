@@ -6,7 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Conversation } from '@sql/entities/conversation';
 import { Message } from '@sql/entities/message';
-import { visionTool } from './tools/vision';
+import { VisionTool, SearchTool } from './tools';
 
 @Injectable()
 export class LlmService {
@@ -37,7 +37,7 @@ export class LlmService {
 
   private readonly agent = createAgent({
     model: this.chatModel,
-    tools: [visionTool(this.visionModel)],
+    tools: [VisionTool(this.visionModel), SearchTool],
     systemPrompt: '请简洁明了地回答，关键信息完整，无需多余铺垫和解释。',
   });
 
