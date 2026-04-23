@@ -2,7 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { tool } from 'langchain';
 import { z } from 'zod';
 
-export const visionTool = (visionModel: ChatOpenAI) =>
+export const VisionTool = (visionModel: ChatOpenAI) =>
   tool(
     async ({ list, query }) => {
       try {
